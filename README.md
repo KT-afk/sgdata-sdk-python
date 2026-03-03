@@ -1,13 +1,15 @@
 # SGData SDK
 
-A simple Python client for accessing Singapore's government data APIs. Get weather forecasts, air quality readings, and carpark availability all in one place.
+A Python client for Singapore's government data APIs. Get typed, ready-to-use data for weather, air quality, and carpark availability — no dict wrangling required.
 
 ## Features
 
-- Simple, unified client for 9 different data endpoints
-- Full type hints for better autocomplete
-- Get current or historical data
-- Works out of the box, no config needed
+- Typed responses for all 9 endpoints — full autocomplete, no raw dicts
+- Auto-coercion of API quirks (string numbers, string datetimes)
+- Convenience methods on responses: `available()`, `get()`, `full()`
+- SDK exceptions instead of bare `requests` errors
+- Pass `datetime` objects or strings for historical queries
+- Optional retry with exponential backoff
 
 ## Installation
 
@@ -22,52 +24,99 @@ from sgdata import SGDataClient
 
 client = SGDataClient()
 
-# Check the air quality
+# Typed responses — no dict drilling
 psi = client.get_psi()
+print(psi.readings.psi_24h)          # dict[Region, int]
+print(psi.timestamp)                  # datetime
 
-# Get the weather forecast
 weather = client.get_2hour_weather_forecast()
+ang_mo_kio = weather.get("Ang Mo Kio")
+print(ang_mo_kio.forecast)            # "Partly Cloudy"
+print(ang_mo_kio.latitude)            # 1.375
 
-# Find available parking
 carparks = client.get_carpark_availability()
+print(carparks.timestamp)             # datetime
+```
+
+## Carpark Availability
+
+The carpark endpoint is where the SDK saves the most work:
+
+```python
+carparks = client.get_carpark_availability()
+
+# All carparks with available spaces
+for cp in carparks.available():
+    print(cp.carpark_number, cp.total_available)
+
+# Only carparks with available car lots
+from sgdata import LotType
+for cp in carparks.available(lot_type=LotType.CAR):
+    print(cp.carpark_number, cp.car_lots.available_lots)
+
+# Look up a specific carpark
+hg1 = carparks.get("HG1")
+if hg1:
+    print(f"{hg1.carpark_number}: {hg1.car_lots.occupancy_rate:.0%} full")
+
+# All full carparks
+full = carparks.full()
 ```
 
 ## What You Can Get
 
 **Air Quality**
-- `get_psi()` - Pollutant Standards Index
-- `get_pm25()` - PM2.5 readings
+- `get_psi()` → `PSIResponse` — Pollutant Standards Index
+- `get_pm25()` → `PM25Response` — PM2.5 readings
 
 **Weather Forecasts**
-- `get_2hour_weather_forecast()`
-- `get_24hour_weather_forecast()`
-- `get_4day_weather_forecast()`
+- `get_2hour_weather_forecast()` → `WeatherForecastResponse`
+- `get_24hour_weather_forecast()` → `WeatherForecastResponse`
+- `get_4day_weather_forecast()` → `WeatherForecastResponse`
 
-**Weather Data**
-- `get_rainfall()`
-- `get_relative_humidity()`
-- `get_air_temperature()`
+**Weather Measurements**
+- `get_rainfall()` → `StationReadingResponse`
+- `get_relative_humidity()` → `StationReadingResponse`
+- `get_air_temperature()` → `StationReadingResponse`
 
 **Transport**
-- `get_carpark_availability()` - HDB carpark lots
+- `get_carpark_availability()` → `CarparkAvailabilityResponse`
 
-## More Examples
+## Historical Data
 
-### Getting Historical Data
-
-Want data from a specific time? Just pass in a date or datetime:
+Pass a `datetime`, `date`, or a string:
 
 ```python
-# Get PSI from a specific date
-psi = client.get_psi(date="2024-01-15")
+from datetime import datetime, date
 
-# Or a specific time
+# datetime object
+psi = client.get_psi(date_time=datetime(2024, 1, 15, 12))
+
+# date object
+psi = client.get_psi(date=date(2024, 1, 15))
+
+# or a string, same as before
 psi = client.get_psi(date_time="2024-01-15T12:00:00")
 ```
 
-### Using Context Manager
+## Error Handling
 
-Automatically clean up the session when done:
+```python
+from sgdata import SGDataError, SGDataAPIError, RateLimitError, SGDataTimeoutError
+
+try:
+    carparks = client.get_carpark_availability()
+except RateLimitError:
+    print("Rate limited — back off and retry")
+except SGDataTimeoutError:
+    print("Request timed out")
+except SGDataAPIError as e:
+    print(f"API error {e.status_code}: {e}")
+except SGDataError as e:
+    print(f"SDK error: {e}")
+```
+
+## Context Manager
 
 ```python
 with SGDataClient() as client:
@@ -75,49 +124,26 @@ with SGDataClient() as client:
     temp = client.get_air_temperature()
 ```
 
-### Handling Errors
+## Retry Support
 
-```python
-import requests
-
-try:
-    data = client.get_psi()
-except requests.HTTPError as e:
-    print(f"Oops, something went wrong: {e}")
+```bash
+pip install sgdata-sdk[retry]
 ```
 
-### Custom Timeout
-
 ```python
-# Need more time? Adjust the timeout
-client = SGDataClient(timeout=60)
+# Automatically retries on 429, 5xx, and timeouts (3 attempts, exponential backoff)
+client = SGDataClient(retry=True)
 ```
-
-## API Details
-
-All methods return parsed JSON as a dictionary. Most methods accept optional `date` or `date_time` parameters for historical data:
-
-- `date` - Format: `"2024-01-15"`
-- `date_time` - Format: `"2024-01-15T12:00:00"`
-
-The client uses a 30-second timeout by default, which you can customize when creating it.
 
 ## Development
-
-Want to contribute? Great!
 
 ```bash
 git clone https://github.com/KT-afk/sgdata-sdk-python.git
 cd sgdata-sdk-python
 pip install -e ".[dev]"
 
-# Run tests
-pytest
-
-# Check types
-mypy sgdata
-
-# Format code
+pytest          # run tests
+mypy sgdata     # type check
 black sgdata tests
 ```
 
