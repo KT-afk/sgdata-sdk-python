@@ -130,7 +130,7 @@ class TestSGDataClientInitialization:
         assert client.base_url == "https://api.data.gov.sg/v1"
         assert client.timeout == 30
         assert isinstance(client.session, requests.Session)
-        assert client.session.headers["User-Agent"] == "sgdata-sdk-python/0.2.0"
+        assert client.session.headers["User-Agent"] == "sgdata-sdk-python/0.2.1"
         assert client.session.headers["Accept"] == "application/json"
         client.close()
 

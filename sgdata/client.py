@@ -50,7 +50,7 @@ class SGDataClient:
         self.retry = retry
         self.session = requests.Session()
         headers: Dict[str, str] = {
-            "User-Agent": "sgdata-sdk-python/0.2.0",
+            "User-Agent": "sgdata-sdk-python/0.2.1",
             "Accept": "application/json",
         }
         if api_key is not None:
