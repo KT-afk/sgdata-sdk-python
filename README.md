@@ -135,6 +135,140 @@ pip install sgdata-sdk[retry]
 client = SGDataClient(retry=True)
 ```
 
+## Type Reference
+
+### CarparkAvailabilityResponse
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `carparks` | `List[Carpark]` | All carpark records |
+| `timestamp` | `datetime` | API response timestamp |
+| `raw` | `Dict` | Raw API response |
+
+**Methods:** `get(carpark_number)` → `Carpark | None`, `available(lot_type=None)` → `List[Carpark]`, `full()` → `List[Carpark]`
+
+### Carpark
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `carpark_number` | `str` | Carpark ID (e.g., "HE12") |
+| `lots` | `List[LotInfo]` | Availability by lot type |
+| `updated_at` | `datetime` | Last updated time |
+| `car_lots` | `LotInfo \| None` (property) | Shortcut for type `'C'` lots |
+| `total_available` | `int` (property) | Sum of all available lots |
+| `is_full` | `bool` (property) | True if no lots available |
+
+### LotInfo
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_lots` | `int` | Total capacity |
+| `available_lots` | `int` | Currently available |
+| `lot_type` | `LotType` | Lot category |
+| `occupancy_rate` | `float` (property) | Usage ratio (0.0–1.0) |
+
+### LotType (Enum)
+
+| Value | Description |
+|-------|-------------|
+| `'C'` | Car |
+| `'Y'` | Motorcycle |
+| `'H'` | Heavy vehicle |
+| `'S'` | Season parking |
+
+### PSIResponse
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | `datetime` | Reading timestamp |
+| `update_timestamp` | `datetime` | Last API update time |
+| `readings` | `PSIReading` | All pollutant readings |
+| `raw` | `Dict` | Raw API response |
+
+### PSIReading
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `psi_twenty_four_hourly` | `Dict[Region, int\|float]` | 24-hour PSI |
+| `pm25_twenty_four_hourly` | `Dict[Region, int\|float]` | 24-hour PM2.5 |
+| `pm10_twenty_four_hourly` | `Dict[Region, int\|float]` | 24-hour PM10 |
+| `o3_sub_index` | `Dict[Region, int\|float]` | Ozone sub-index |
+| `co_sub_index` | `Dict[Region, int\|float]` | CO sub-index |
+| `so2_sub_index` | `Dict[Region, int\|float]` | SO2 sub-index |
+| `co_eight_hour_max` | `Dict[Region, int\|float]` | 8-hour max CO |
+| `no2_one_hour_max` | `Dict[Region, int\|float]` | 1-hour max NO2 |
+| `so2_twenty_four_hourly` | `Dict[Region, int\|float]` | 24-hour SO2 |
+| `pm25_sub_index` | `Dict[Region, int\|float]` | PM2.5 sub-index |
+| `pm10_sub_index` | `Dict[Region, int\|float]` | PM10 sub-index |
+| `o3_eight_hour_max` | `Dict[Region, int\|float]` | 8-hour max ozone |
+
+**Aliases:** `psi_24h`, `pm25_24h`, `pm10_24h`
+
+### PM25Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | `datetime` | Reading timestamp |
+| `readings` | `PM25Reading` | PM2.5 readings |
+| `raw` | `Dict` | Raw API response |
+
+### PM25Reading
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pm25_one_hourly` | `Dict[Region, int]` | 1-hour PM2.5 by region |
+
+### WeatherForecastResponse
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forecasts` | `List[AreaForecast]` | Per-area forecasts |
+| `valid_from` | `datetime` | Forecast validity start |
+| `valid_to` | `datetime \| None` | Forecast validity end |
+| `timestamp` | `datetime` | API response timestamp |
+| `raw` | `Dict` | Raw API response |
+
+**Methods:** `get(area_name)` → `AreaForecast | None`
+
+### AreaForecast
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `area` | `str` | Area name (e.g., "Ang Mo Kio") |
+| `forecast` | `str` | Forecast text (e.g., "Partly Cloudy") |
+| `latitude` | `float` | Area latitude |
+| `longitude` | `float` | Area longitude |
+
+### StationReadingResponse
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `readings` | `List[StationReading]` | Per-station readings |
+| `timestamp` | `datetime` | API response timestamp |
+| `raw` | `Dict` | Raw API response |
+
+### StationReading
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `station_id` | `str` | Station ID |
+| `station_name` | `str` | Station name |
+| `latitude` | `float` | Station latitude |
+| `longitude` | `float` | Station longitude |
+| `value` | `float` | Reading value |
+| `timestamp` | `datetime` | Reading timestamp |
+
+### Region (Enum)
+
+| Value | Description |
+|-------|-------------|
+| `'west'` | West region |
+| `'east'` | East region |
+| `'central'` | Central region |
+| `'south'` | South region |
+| `'north'` | North region |
+| `'national'` | National average |
+
 ## Development
 
 ```bash
