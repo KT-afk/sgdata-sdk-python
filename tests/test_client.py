@@ -1120,3 +1120,221 @@ class TestDatetimeInputs:
         _, kwargs = mock_get.call_args
         assert kwargs["params"] == {"date_time": "2024-01-15T12:00:00"}
         client.close()
+
+    def test_date_param_with_datetime_object(self):
+        """A datetime passed to the date param is formatted as YYYY-MM-DD."""
+        client = SGDataClient()
+        params = client._build_params(date=datetime(2024, 1, 15, 14, 30, 0))
+        assert params == {"date": "2024-01-15"}
+        client.close()
+
+
+# ===========================================================================
+# TestApiKeySupport
+# ===========================================================================
+
+
+class TestApiKeySupport:
+    """Test API key header support."""
+
+    def test_api_key_sets_header(self):
+        """api_key parameter sets the api-key header on the session."""
+        client = SGDataClient(api_key="test-key-123")
+        assert client.session.headers["api-key"] == "test-key-123"
+        client.close()
+
+    def test_no_api_key_by_default(self):
+        """No api-key header is set when api_key is not provided."""
+        client = SGDataClient()
+        assert "api-key" not in client.session.headers
+        client.close()
+
+    @patch("requests.Session.get")
+    def test_api_key_sent_with_request(self, mock_get):
+        """api-key header is sent with every request."""
+        mock_get.return_value = _make_mock_response(_MINIMAL_PSI_JSON)
+
+        client = SGDataClient(api_key="my-secret-key")
+        client.get_psi()
+
+        assert client.session.headers["api-key"] == "my-secret-key"
+        client.close()
+
+
+# ===========================================================================
+# TestRetryBehavior
+# ===========================================================================
+
+
+class TestRetryBehavior:
+    """Test retry logic with tenacity."""
+
+    @patch("requests.Session.get")
+    def test_retry_succeeds_after_transient_failure(self, mock_get):
+        """Retry recovers from a transient 500 error."""
+        fail_resp = Mock()
+        fail_resp.status_code = 500
+        fail_resp.raise_for_status.side_effect = requests.HTTPError("500")
+
+        ok_resp = _make_mock_response(_MINIMAL_PSI_JSON)
+
+        mock_get.side_effect = [fail_resp, ok_resp]
+
+        client = SGDataClient(retry=True)
+        result = client.get_psi()
+
+        assert isinstance(result, PSIResponse)
+        assert mock_get.call_count == 2
+        client.close()
+
+    @patch("requests.Session.get")
+    def test_retry_on_rate_limit(self, mock_get):
+        """Retry recovers from a 429 rate limit."""
+        rate_resp = Mock()
+        rate_resp.status_code = 429
+
+        ok_resp = _make_mock_response(_MINIMAL_PSI_JSON)
+
+        mock_get.side_effect = [rate_resp, ok_resp]
+
+        client = SGDataClient(retry=True)
+        result = client.get_psi()
+
+        assert isinstance(result, PSIResponse)
+        assert mock_get.call_count == 2
+        client.close()
+
+    @patch("requests.Session.get")
+    def test_retry_on_timeout(self, mock_get):
+        """Retry recovers from a timeout."""
+        ok_resp = _make_mock_response(_MINIMAL_PSI_JSON)
+        mock_get.side_effect = [requests.Timeout("timed out"), ok_resp]
+
+        client = SGDataClient(retry=True)
+        result = client.get_psi()
+
+        assert isinstance(result, PSIResponse)
+        assert mock_get.call_count == 2
+        client.close()
+
+    @patch("requests.Session.get")
+    def test_retry_does_not_retry_4xx(self, mock_get):
+        """Retry does NOT retry on a 404 client error."""
+        fail_resp = Mock()
+        fail_resp.status_code = 404
+        fail_resp.raise_for_status.side_effect = requests.HTTPError("404")
+        mock_get.return_value = fail_resp
+
+        client = SGDataClient(retry=True)
+
+        with pytest.raises(SGDataAPIError):
+            client.get_psi()
+
+        assert mock_get.call_count == 1
+        client.close()
+
+    @patch("requests.Session.get")
+    def test_retry_exhausted_raises(self, mock_get):
+        """After 3 failed attempts, the exception is re-raised."""
+        fail_resp = Mock()
+        fail_resp.status_code = 502
+        fail_resp.raise_for_status.side_effect = requests.HTTPError("502")
+        mock_get.return_value = fail_resp
+
+        client = SGDataClient(retry=True)
+
+        with pytest.raises(SGDataAPIError) as exc_info:
+            client.get_psi()
+
+        assert exc_info.value.status_code == 502
+        assert mock_get.call_count == 3
+        client.close()
+
+
+# ===========================================================================
+# TestPSIReadingAliases
+# ===========================================================================
+
+
+class TestPSIReadingAliases:
+    """Test all PSIReading property aliases."""
+
+    def test_pm25_24h_alias(self, sample_psi_data):
+        """pm25_24h is an alias for pm25_twenty_four_hourly."""
+        response = PSIResponse.from_dict(sample_psi_data)
+        assert response.readings.pm25_24h is response.readings.pm25_twenty_four_hourly
+
+    def test_pm10_24h_alias(self, sample_psi_data):
+        """pm10_24h is an alias for pm10_twenty_four_hourly."""
+        response = PSIResponse.from_dict(sample_psi_data)
+        assert response.readings.pm10_24h is response.readings.pm10_twenty_four_hourly
+
+
+# ===========================================================================
+# TestAvailableWithNonCarLotType
+# ===========================================================================
+
+
+class TestAvailableWithNonCarLotType:
+    """Test available() filtering with non-CAR lot types."""
+
+    def test_available_motorcycle_lots(self):
+        """available(LotType.MOTORCYCLE) filters by Y-type lots."""
+        data = {
+            "items": [
+                {
+                    "timestamp": "2024-01-15T12:00:00+08:00",
+                    "carpark_data": [
+                        {
+                            "carpark_number": "HAS_Y",
+                            "update_datetime": "2024-01-15T12:00:00",
+                            "carpark_info": [
+                                {"total_lots": "10", "lot_type": "Y", "lots_available": "5"},
+                                {"total_lots": "50", "lot_type": "C", "lots_available": "0"},
+                            ],
+                        },
+                        {
+                            "carpark_number": "NO_Y",
+                            "update_datetime": "2024-01-15T12:00:00",
+                            "carpark_info": [
+                                {"total_lots": "50", "lot_type": "C", "lots_available": "20"},
+                            ],
+                        },
+                        {
+                            "carpark_number": "EMPTY_Y",
+                            "update_datetime": "2024-01-15T12:00:00",
+                            "carpark_info": [
+                                {"total_lots": "10", "lot_type": "Y", "lots_available": "0"},
+                            ],
+                        },
+                    ],
+                }
+            ]
+        }
+        response = CarparkAvailabilityResponse.from_dict(data)
+        available = response.available(lot_type=LotType.MOTORCYCLE)
+        assert len(available) == 1
+        assert available[0].carpark_number == "HAS_Y"
+
+    def test_available_heavy_vehicle_lots(self):
+        """available(LotType.HEAVY_VEHICLE) filters by H-type lots."""
+        data = {
+            "items": [
+                {
+                    "timestamp": "2024-01-15T12:00:00+08:00",
+                    "carpark_data": [
+                        {
+                            "carpark_number": "HAS_H",
+                            "update_datetime": "2024-01-15T12:00:00",
+                            "carpark_info": [
+                                {"total_lots": "5", "lot_type": "H", "lots_available": "2"},
+                            ],
+                        },
+                    ],
+                }
+            ]
+        }
+        response = CarparkAvailabilityResponse.from_dict(data)
+        available = response.available(lot_type=LotType.HEAVY_VEHICLE)
+        assert len(available) == 1
+        assert available[0].carpark_number == "HAS_H"

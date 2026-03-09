@@ -20,6 +20,7 @@ class SGDataClient:
         base_url: Base URL for the API. Defaults to data.gov.sg API.
         timeout: Request timeout in seconds. Defaults to 30.
         retry: Enable automatic retry logic with exponential backoff. Requires tenacity.
+        api_key: API key for authenticated access. Optional — data.gov.sg works without one.
 
     Example:
         >>> client = SGDataClient()
@@ -34,6 +35,7 @@ class SGDataClient:
         base_url: Optional[str] = None,
         timeout: int = 30,
         retry: bool = False,
+        api_key: Optional[str] = None,
     ) -> None:
         """Initialize the SGData client.
 
@@ -41,15 +43,19 @@ class SGDataClient:
             base_url: Custom base URL for the API (optional).
             timeout: Request timeout in seconds.
             retry: Enable automatic retry with exponential backoff (requires tenacity).
+            api_key: API key for authenticated access (optional).
         """
         self.base_url = base_url or self.BASE_URL
         self.timeout = timeout
         self.retry = retry
         self.session = requests.Session()
-        self.session.headers.update({
+        headers: Dict[str, str] = {
             "User-Agent": "sgdata-sdk-python/0.2.0",
             "Accept": "application/json",
-        })
+        }
+        if api_key is not None:
+            headers["api-key"] = api_key
+        self.session.headers.update(headers)
         if retry:
             try:
                 import tenacity  # noqa: F401
